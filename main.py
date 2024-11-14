@@ -59,8 +59,8 @@ class Toypad:
         self.tagChange = None
         self.mqtt_client = mqtt.Client()
 
-        # Load tag configuration from JSON file
-        self.tag_config = self.load_tag_config()
+        # Load or create tag configuration
+        self.tag_config = self.load_or_create_tag_config()
 
         # Initialize MQTT client
         self.setup_mqtt()
@@ -80,13 +80,24 @@ class Toypad:
         self.mqtt_client.connect(MQTT_HOST)
         self.mqtt_client.loop_start()
 
-    def load_tag_config(self):
+    def load_or_create_tag_config(self):
+        """Load the tag configuration from a JSON file or create it if it doesn't exist."""
+        if not os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "w") as file:
+                json.dump({}, file)  # Initialize with an empty dictionary
+            print("Created new configuration file.")
+        
         try:
             with open(CONFIG_FILE, "r") as file:
                 return json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except json.JSONDecodeError:
             print("Error loading tag configuration.")
             return {}
+
+    def save_tag_config(self):
+        """Save the current tag configuration to the JSON file."""
+        with open(CONFIG_FILE, "w") as file:
+            json.dump(self.tag_config, file, indent=4)
 
     def listen_for_tags(self):
         endpoint_in = self.device[0][(0, 0)][0]
@@ -104,7 +115,7 @@ class Toypad:
                 if action == TAG_ADDED:
                     if uid not in self.detected_tags:
                         self.detected_tags[uid] = pad_num
-                        tag_info = self.tag_config.get(uid, {})
+                        tag_info = self.get_or_create_tag_info(uid)
                         if self.tagNew:
                             self.tagNew(uid, pad_num, tag_info)
                     elif self.detected_tags[uid] != pad_num:
@@ -121,6 +132,15 @@ class Toypad:
                 if e.errno != 110:
                     print("USB Error:", e)
                     self.handle_disconnection()
+
+    def get_or_create_tag_info(self, uid):
+        """Retrieve tag info from config, create an empty entry if the tag is new."""
+        if uid not in self.tag_config:
+            # Create an empty entry for new tags and save to file
+            self.tag_config[uid] = {"url": "", "sound": ""}
+            self.save_tag_config()
+            print(f"Created new entry for tag UID={uid}")
+        return self.tag_config[uid]
 
     def handle_disconnection(self):
         print("ToyPad disconnected. Reconnecting...")
