@@ -14,7 +14,9 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", None)
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", None)
 CONFIG_FILE = os.getenv("CONFIG_FILE", "tags.json")
 MQTT_BASE_TOPIC = os.getenv("MQTT_BASE_TOPIC", "toypad")
+MASTERTAG = os.getenv("MASTERTAG", None)
 
+ENABLE_WRITE = False
 # LEGO ToyPad vendor and product IDs
 VENDOR_ID = 0x0e6f
 PRODUCT_ID = 0x0241
@@ -100,6 +102,7 @@ class Toypad:
             json.dump(self.tag_config, file, indent=4)
 
     def listen_for_tags(self):
+        global ENABLE_WRITE, MASTERTAG
         endpoint_in = self.device[0][(0, 0)][0]
         while self.listening:
             try:
@@ -113,6 +116,9 @@ class Toypad:
                 uid = uid_bytes.hex()
 
                 if action == TAG_ADDED:
+                    if uid == MASTERTAG:
+                        ENABLE_WRITE = not ENABLE_WRITE
+                        print("Write mode: ", ENABLE_WRITE)
                     if uid not in self.detected_tags:
                         self.detected_tags[uid] = pad_num
                         tag_info = self.get_or_create_tag_info(uid)
@@ -138,8 +144,9 @@ class Toypad:
         if uid not in self.tag_config:
             # Create an empty entry for new tags and save to file
             self.tag_config[uid] = {"url": "", "sound": ""}
-            self.save_tag_config()
-            print(f"Created new entry for tag UID={uid}")
+            if ENABLE_WRITE:
+                self.save_tag_config()
+                print(f"Created new entry for tag UID={uid}")
         return self.tag_config[uid]
 
     def handle_disconnection(self):
